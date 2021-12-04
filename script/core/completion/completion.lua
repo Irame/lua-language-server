@@ -256,11 +256,14 @@ local function isSameSource(state, source, pos)
     return source.start <= pos and source.finish >= pos
 end
 
-local function getParams(func, oop)
+local function getParams(func, oop, isDocOfMethod)
     if not func.args then
         return '()'
     end
     local args = {}
+    if isDocOfMethod then
+        args[#args+1] = 'self'
+    end
     for _, arg in ipairs(func.args) do
         if arg.type == '...' then
             args[#args+1] = '...'
@@ -540,13 +543,14 @@ local function checkFieldOfRefs(refs, state, word, startPos, position, parent, o
             local value = searcher.getObjectValue(src) or src
             if value.type == 'function'
             or value.type == 'doc.type.function' then
+                local isMethod = src.type == 'setmethod' or src.type == 'getmethod'
                 funcLabel = name .. getParams(value, oop)
                 fields[funcLabel] = src
                 count = count + 1
                 if value.type == 'function' and value.bindDocs then
                     for _, doc in ipairs(value.bindDocs) do
                         if doc.type == 'doc.overload' then
-                            funcLabel = name .. getParams(doc.overload, oop)
+                            funcLabel = name .. getParams(doc.overload, oop, isMethod)
                             fields[funcLabel] = doc.overload
                         end
                     end

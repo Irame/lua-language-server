@@ -60,10 +60,19 @@ local function asDocFunction(source, oop)
         return ''
     end
     local args = {}
+
+    local doc = guide.getParentType(source, 'doc.overload')
+    local bindSources = doc and doc.bindSources
+    local parent = bindSources and bindSources[1].parent
+    local methodDef = parent and parent.type == 'setmethod'
+    if methodDef then
+        args[#args+1] = ('self: %s'):format(infer.searchAndViewInfers(parent.node))
+    end
+
     for i = 1, #source.args do
         local arg = source.args[i]
         local name = arg.name[1]
-        args[i] = ('%s%s: %s'):format(
+        args[#args+1] = ('%s%s: %s'):format(
             name,
             arg.optional and '?' or '',
             arg.extends and infer.searchAndViewInfers(arg.extends) or 'any'
