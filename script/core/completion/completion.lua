@@ -22,6 +22,7 @@ local infer        = require 'core.infer'
 local noder        = require 'core.noder'
 local await        = require 'await'
 local postfix      = require 'core.completion.postfix'
+local lookback     = require 'core.look-backward'
 
 local DiagnosticModes = {
     'disable-next-line',
@@ -1358,6 +1359,12 @@ local function getCallEnumsAndFuncs(source, index, oop, call)
         end
     end
     if source.type == 'doc.type.function' then
+        local doc = guide.getParentType(source, 'doc.overload')
+        local bindSources = doc and doc.bindSources
+        local parent = bindSources and bindSources[1].parent
+        if parent and parent.type == 'setmethod' then
+            index = index - 1
+        end
         local arg = source.args[index]
         if arg and arg.extends then
             return pushCallEnumsAndFuncs(vm.getDefs(arg.extends))
@@ -1425,13 +1432,52 @@ local function getCallArgInfo(call, position)
     if not call.args then
         return 1, nil, nil
     end
+
     local oop = call.node.type == 'getmethod'
-    for index, arg in ipairs(call.args) do
-        if arg.start <= position and arg.finish >= position then
-            return index, arg, oop
+
+    local index
+    local args = {}
+    for _, arg in ipairs(call.args) do
+        if not arg.dummy then
+            args[#args+1] = arg
         end
     end
-    return #call.args + 1, nil, oop
+    local uri   = guide.getUri(call)
+    local state = files.getState(uri)
+    local text  = files.getText(uri)
+    for i, arg in ipairs(args) do
+        local startOffset = guide.positionToOffset(state, arg.start)
+        startOffset =  lookback.findTargetSymbol(text, startOffset, '(')
+                    or lookback.findTargetSymbol(text, startOffset, ',')
+                    or startOffset
+        local startPos = guide.offsetToPosition(state, startOffset)
+        if startPos > position then
+            index = i - 1
+            break
+        end
+        if position <= arg.finish then
+            index = i
+            break
+        end
+    end
+    if not index then
+        local offset     = guide.positionToOffset(state, position)
+        local backSymbol = lookback.findSymbol(text, offset)
+        if backSymbol == ','
+        or backSymbol == '(' then
+            index = #args + 1
+        else
+            index = #args
+        end
+    end
+
+    -- dummy was left out of args copy so the index is of by one
+    local offset = oop and 1 or 0
+    if args[index] and args[index].start <= position and args[index].finish >= position then
+        return index + offset, args[index], oop
+    else
+        return index + offset, nil, oop
+    end
 end
 
 local function checkTableLiteralField(state, position, tbl, fields, results)

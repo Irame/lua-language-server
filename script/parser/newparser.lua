@@ -1510,6 +1510,7 @@ local function parseExpList(mini)
     if not wantSep then
         missExp()
     end
+    list[#list].isLastArg = wantSep;
     return list
 end
 
