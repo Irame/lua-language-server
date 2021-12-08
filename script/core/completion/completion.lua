@@ -1429,11 +1429,20 @@ local function findCall(state, position)
 end
 
 local function getCallArgInfo(call, position)
-    if not call.args then
-        return 1, nil, nil
-    end
-
     local oop = call.node.type == 'getmethod'
+
+    if not call.args then
+        local uri   = guide.getUri(call)
+        local state = files.getState(uri)
+        local text  = files.getText(uri)
+
+        local offset = guide.positionToOffset(state, position)
+        if lookback.findSymbol(text, offset) == '(' then
+            return 1, nil, oop
+        else
+            return 0, nil, oop
+        end
+    end
 
     local index
     local args = {}
@@ -1532,6 +1541,9 @@ local function tryCallArg(state, position, results)
     end
     local myResults = {}
     local argIndex, arg, oop = getCallArgInfo(call, position)
+    if argIndex <= 0 then
+        return
+    end
     if arg and arg.type == 'function' then
         return
     end
